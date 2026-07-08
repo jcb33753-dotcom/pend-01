@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TicketActive</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+:root{
+  --mint:#3dd9a4;--mint-pale:#e8faf4;--mint-light:#b8f0dc;
+  --sky:#5bcfec;--sky-pale:#e8f7fd;--sky-light:#b8edf8;
+  --teal:#1aa57a;--deep:#0d3d2e;
+  --gray-100:#eef9f5;--gray-200:#d4ede6;--gray-400:#7ab5a0;
+  --text:#0d2e25;--text-soft:#3d6558;
+  --shadow:0 4px 24px rgba(61,217,164,.12);
+  --shadow-lg:0 8px 40px rgba(61,217,164,.18);
+  --radius:16px;--radius-sm:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:linear-gradient(135deg,#e8faf4,#e8f7fd 50%,#f0fbf7);min-height:100vh;color:var(--text);}
+
+/* ══ FULL-SCREEN STATES ══ */
+.fullscreen{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,var(--deep),#0a4a38 50%,#084060);display:flex;align-items:center;justify-content:center;padding:20px;}
+#loadingOverlay{position:fixed;inset:0;z-index:8888;background:rgba(13,61,46,.8);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+.loading-spinner{width:48px;height:48px;border:4px solid rgba(61,217,164,.2);border-top-color:var(--mint);border-radius:50%;animation:spin .8s linear infinite;}
+.loading-text{color:#fff;font-size:.95rem;font-weight:500;opacity:.8;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── SHARED CARD STYLE FOR FULLSCREENS ── */
+.fs-box{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:38px;max-width:540px;width:100%;backdrop-filter:blur(20px);}
+.fs-logo{font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:800;color:#fff;display:flex;align-items:center;gap:12px;margin-bottom:4px;}
+.fs-logo-icon{width:44px;height:44px;background:linear-gradient(135deg,var(--mint),var(--sky));border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0;}
+.fs-sub{color:rgba(255,255,255,.5);font-size:.88rem;margin-bottom:22px;}
+.fs-step{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:13px 16px;margin-bottom:10px;font-size:.83rem;color:rgba(255,255,255,.7);line-height:1.6;}
+.fs-step strong{color:var(--mint);}
+.fs-step a{color:var(--sky);text-decoration:underline;}
+.fs-form{display:flex;flex-direction:column;gap:11px;margin-top:18px;}
+.fs-form label{font-size:.75rem;font-weight:700;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.5px;}
+.fs-form input{padding:10px 14px;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.15);border-radius:10px;color:#fff;font-family:'DM Sans',sans-serif;font-size:.9rem;outline:none;transition:border-color .2s;width:100%;}
+.fs-form input:focus{border-color:var(--mint);}
+.fs-form input::placeholder{color:rgba(255,255,255,.28);}
+.fs-err{background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:8px;padding:10px 14px;font-size:.83rem;display:none;margin-top:6px;}
+
+/* ── BLOCKED SCREEN (invalid/deleted token) ── */
+#blockedScreen .fs-icon{font-size:3.5rem;margin-bottom:14px;}
+#blockedScreen .fs-title{font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;color:#fff;margin-bottom:10px;}
+#blockedScreen .fs-msg{color:rgba(255,255,255,.6);font-size:.9rem;line-height:1.7;max-width:360px;margin:0 auto;}
+
+/* ── ADMIN PIN ── */
+#pinOverlay{position:fixed;inset:0;z-index:7000;background:rgba(13,46,37,.65);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:20px;}
+.pin-box{background:#fff;border-radius:20px;padding:36px;max-width:360px;width:100%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.2);}
+.pin-title{font-family:'Syne',sans-serif;font-size:1.25rem;font-weight:800;color:var(--deep);margin-bottom:6px;}
+.pin-sub{font-size:.86rem;color:var(--text-soft);margin-bottom:20px;}
+.pin-dots{display:flex;justify-content:center;gap:10px;margin-bottom:20px;}
+.pin-dot{width:14px;height:14px;border-radius:50%;background:var(--gray-200);transition:background .2s;}
+.pin-dot.filled{background:var(--teal);}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:240px;margin:0 auto;}
+.pin-key{padding:14px;border:1.5px solid var(--gray-200);border-radius:12px;font-size:1.1rem;font-weight:700;color:var(--deep);cursor:pointer;transition:all .2s;background:#fff;font-family:'Syne',sans-serif;}
+.pin-key:hover{background:var(--mint-pale);border-color:var(--mint);}
+.pin-key.del{color:var(--text-soft);font-size:.85rem;}
+.pin-err{color:#dc2626;font-size:.82rem;margin-top:12px;min-height:18px;}
+
+/* ── DB STATUS ── */
+#dbStatusBar{display:flex;align-items:center;gap:8px;padding:6px 32px;font-size:.78rem;font-weight:600;background:var(--mint-pale);color:var(--teal);border-bottom:1px solid var(--gray-200);}
+.db-dot{width:8px;height:8px;border-radius:50%;background:var(--mint);flex-shrink:0;}
+.realtime-pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--mint);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+/* ── HEADER ── */
+header{background:linear-gradient(135deg,var(--deep),#0a4a38 60%,#084060);padding:0 32px;height:70px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 20px rgba(0,0,0,.3);position:sticky;top:0;z-index:100;}
+.logo{font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;color:#fff;display:flex;align-items:center;gap:10px;}
+.logo-dot{color:var(--mint);}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--mint),var(--sky));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
+.user-badge{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:30px;padding:6px 14px 6px 8px;color:rgba(255,255,255,.85);font-size:.85rem;font-weight:500;}
+.user-avatar{width:28px;height:28px;background:linear-gradient(135deg,var(--mint),var(--sky));border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff;}
+.role-tag{background:linear-gradient(90deg,var(--mint),var(--sky));color:var(--deep);font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;}
+
+/* ── LAYOUT ── */
+.app-wrapper{display:flex;min-height:calc(100vh - 70px);}
+.sidebar{width:240px;flex-shrink:0;background:rgba(255,255,255,.7);backdrop-filter:blur(20px);border-right:1px solid var(--gray-200);padding:24px 16px;display:flex;flex-direction:column;gap:6px;}
+.sidebar-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--gray-400);padding:0 8px;margin-bottom:8px;margin-top:4px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:.9rem;font-weight:500;color:var(--text-soft);transition:all .2s;border:none;background:none;width:100%;text-align:left;}
+.nav-item:hover{background:var(--mint-pale);color:var(--teal);}
+.nav-item.active{background:linear-gradient(135deg,var(--mint-pale),var(--sky-pale));color:var(--teal);font-weight:600;box-shadow:0 2px 8px rgba(61,217,164,.15);}
+.nav-icon{font-size:1.1rem;min-width:22px;text-align:center;}
+.nav-badge{margin-left:auto;background:linear-gradient(135deg,var(--mint),var(--sky));color:var(--deep);font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:12px;min-width:20px;text-align:center;}
+.sidebar-sep{height:1px;background:var(--gray-200);margin:8px 0;}
+.main-content{flex:1;padding:32px;overflow-y:auto;}
+.page{display:none;}
+.page.active{display:block;animation:fadeIn .3s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;}
+.page-title{font-family:'Syne',sans-serif;font-size:1.75rem;font-weight:800;color:var(--deep);letter-spacing:-.5px;}
+.page-subtitle{color:var(--text-soft);font-size:.9rem;margin-top:2px;}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:600;cursor:pointer;border:none;transition:all .2s;}
+.btn-primary{background:linear-gradient(135deg,var(--mint),var(--sky));color:var(--deep);box-shadow:0 4px 16px rgba(61,217,164,.35);}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(61,217,164,.45);}
+.btn-secondary{background:#fff;color:var(--teal);border:1.5px solid var(--mint);}
+.btn-secondary:hover{background:var(--mint-pale);}
+.btn-danger{background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;}
+.btn-danger:hover{background:#fecaca;}
+.btn-sm{padding:6px 12px;font-size:.8rem;}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important;}
+
+/* ── CARDS ── */
+.card{background:rgba(255,255,255,.8);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.9);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);}
+.card-header{font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:700;color:var(--deep);margin-bottom:20px;display:flex;align-items:center;gap:8px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:28px;}
+.stat-card{background:rgba(255,255,255,.85);border-radius:var(--radius);padding:20px;border:1px solid var(--gray-200);box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.stat-card.c1::before{background:linear-gradient(90deg,var(--mint),var(--sky));}
+.stat-card.c2::before{background:linear-gradient(90deg,var(--sky),#a78bfa);}
+.stat-card.c3::before{background:linear-gradient(90deg,#fbbf24,#f97316);}
+.stat-card.c4::before{background:linear-gradient(90deg,#34d399,#059669);}
+.stat-label{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--gray-400);}
+.stat-value{font-family:'Syne',sans-serif;font-size:2rem;font-weight:800;color:var(--deep);margin-top:4px;}
+.stat-icon{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:1.8rem;opacity:.15;}
+
+/* ── FORM ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-group.full{grid-column:1/-1;}
+label{font-size:.83rem;font-weight:600;color:var(--text-soft);}
+input,select,textarea{padding:10px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-family:'DM Sans',sans-serif;font-size:.9rem;color:var(--text);background:rgba(255,255,255,.9);transition:border-color .2s,box-shadow .2s;outline:none;width:100%;}
+input:focus,select:focus,textarea:focus{border-color:var(--mint);box-shadow:0 0 0 3px rgba(61,217,164,.15);}
+textarea{resize:vertical;min-height:90px;}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;border-radius:var(--radius-sm);}
+table{width:100%;border-collapse:collapse;font-size:.875rem;}
+thead tr{background:linear-gradient(135deg,var(--deep),#0a4a38);}
+thead th{padding:12px 16px;text-align:left;color:rgba(255,255,255,.85);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;}
+tbody tr{border-bottom:1px solid var(--gray-100);transition:background .15s;}
+tbody tr:hover{background:var(--mint-pale);}
+tbody td{padding:12px 16px;color:var(--text);vertical-align:middle;}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:.75rem;font-weight:600;}
+.badge-open{background:#dbeafe;color:#1d4ed8;}
+.badge-progress{background:linear-gradient(90deg,#dcfce7,#d1fae5);color:#166534;}
+.badge-closed{background:#f3f4f6;color:#6b7280;}
+.badge-urgent{background:#fee2e2;color:#dc2626;}
+.badge-high{background:#fef3c7;color:#92400e;}
+.badge-medium{background:var(--sky-pale);color:#0369a1;}
+.badge-low{background:var(--mint-pale);color:var(--teal);}
+
+/* ── FILTERS ── */
+.filters-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center;}
+.filters-row input,.filters-row select{padding:8px 12px;font-size:.85rem;width:auto;}
+
+/* ── GUESTS ── */
+.guests-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;}
+.guest-card{background:rgba(255,255,255,.85);border:1px solid var(--gray-200);border-radius:var(--radius);padding:20px;position:relative;box-shadow:var(--shadow);transition:box-shadow .2s,transform .2s;}
+.guest-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px);}
+.guest-card-top{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.guest-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--mint),var(--sky));display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:1rem;font-weight:800;color:var(--deep);flex-shrink:0;}
+.guest-name{font-weight:700;color:var(--deep);font-size:.95rem;}
+.guest-email{font-size:.8rem;color:var(--text-soft);margin-top:2px;}
+.guest-link-box{background:var(--gray-100);border:1px dashed var(--gray-200);border-radius:var(--radius-sm);padding:10px 12px;font-size:.78rem;color:var(--text-soft);word-break:break-all;font-family:monospace;margin-bottom:12px;cursor:pointer;transition:background .2s;}
+.guest-link-box:hover{background:var(--mint-pale);}
+.guest-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+.guest-status{position:absolute;top:14px;right:14px;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:12px;}
+.status-active{background:var(--mint-pale);color:var(--teal);}
+.status-inactive{background:#f3f4f6;color:#6b7280;}
+
+/* ── CONFIG (admin-only sections) ── */
+.cfg-card{background:linear-gradient(135deg,rgba(13,61,46,.95),rgba(8,64,96,.9));border-radius:var(--radius);padding:26px;color:#fff;margin-bottom:20px;}
+.cfg-card label{color:rgba(255,255,255,.72);font-size:.78rem;}
+.cfg-card input{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;}
+.cfg-card input:focus{border-color:var(--mint);}
+.cfg-card input::placeholder{color:rgba(255,255,255,.28);}
+.cfg-title{font-family:'Syne',sans-serif;font-size:1rem;font-weight:800;margin-bottom:4px;}
+.cfg-sub{font-size:.82rem;opacity:.62;margin-bottom:16px;line-height:1.5;}
+.cfg-status{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;padding:5px 12px;border-radius:20px;margin-top:10px;}
+.cfg-ok{background:rgba(61,217,164,.2);color:var(--mint);}
+.cfg-warn{background:rgba(251,191,36,.2);color:#fbbf24;}
+.recipients-list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+.recipient-item{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px 10px;}
+.recipient-item input{flex:1;background:transparent;border:none;color:#fff;font-size:.85rem;padding:0;min-width:0;}
+.recipient-item input:focus{box-shadow:none;border:none;background:transparent;}
+.recipient-item input::placeholder{color:rgba(255,255,255,.3);}
+.rm-btn{background:rgba(239,68,68,.25);border:none;color:#ef4444;border-radius:6px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem;}
+.rm-btn:hover{background:rgba(239,68,68,.45);}
+.add-rec-btn{background:rgba(255,255,255,.07);border:1.5px dashed rgba(255,255,255,.2);color:rgba(255,255,255,.62);border-radius:8px;padding:8px;cursor:pointer;font-size:.85rem;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:6px;font-family:'DM Sans',sans-serif;transition:background .2s;}
+.add-rec-btn:hover{background:rgba(255,255,255,.13);}
+.vars-box{background:var(--gray-100);border-radius:10px;padding:16px;font-family:monospace;font-size:.82rem;line-height:2;color:var(--deep);}
+.vars-box span{color:var(--teal);font-weight:700;}
+.email-log{max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;}
+.log-item{display:flex;align-items:flex-start;gap:8px;font-size:.8rem;padding:6px 10px;border-radius:6px;line-height:1.4;}
+.log-ok{background:#dcfce7;color:#166534;}
+.log-fail{background:#fee2e2;color:#dc2626;}
+.log-info{background:var(--sky-pale);color:#0369a1;}
+.log-time{opacity:.6;min-width:62px;font-size:.75rem;flex-shrink:0;padding-top:1px;}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(13,46,37,.5);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:500;opacity:0;pointer-events:none;transition:opacity .25s;padding:20px;}
+.modal-overlay.open{opacity:1;pointer-events:all;}
+.modal{background:#fff;border-radius:var(--radius);padding:32px;width:100%;max-width:560px;box-shadow:0 24px 80px rgba(0,0,0,.18);transform:translateY(20px);transition:transform .3s;max-height:90vh;overflow-y:auto;}
+.modal-overlay.open .modal{transform:translateY(0);}
+.modal-title{font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:800;color:var(--deep);margin-bottom:20px;}
+.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:24px;}
+
+/* ── GUEST BANNER ── */
+.guest-banner{background:linear-gradient(135deg,var(--mint),var(--sky));color:var(--deep);padding:10px 32px;display:flex;align-items:center;gap:12px;font-size:.88rem;font-weight:600;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:28px;right:28px;background:var(--deep);color:#fff;padding:12px 20px;border-radius:var(--radius-sm);font-size:.88rem;font-weight:500;box-shadow:var(--shadow-lg);display:flex;align-items:center;gap:10px;transform:translateY(80px);opacity:0;transition:all .3s;z-index:700;max-width:360px;}
+#toast.show{transform:translateY(0);opacity:1;}
+
+/* ── MISC ── */
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(13,61,46,.3);border-top-color:var(--deep);border-radius:50%;animation:spin .7s linear infinite;}
+.spinner-w{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-soft);}
+.empty-state .empty-icon{font-size:3rem;margin-bottom:12px;opacity:.5;}
+.empty-state p{font-size:.95rem;}
+.divider{height:1px;background:var(--gray-200);margin:20px 0;}
+@media(max-width:768px){.sidebar{display:none}.main-content{padding:16px}.form-grid{grid-template-columns:1fr}.stats-grid{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+  FIX #3 — BLOCKED SCREEN (deleted/invalid token)
+  Shown when token is present but not found in DB
+══════════════════════════════════════════════ -->
+<div id="blockedScreen" class="fullscreen" style="display:none">
+  <div class="fs-box" style="text-align:center;max-width:420px">
+    <div style="font-size:3.5rem;margin-bottom:14px">🔒</div>
+    <div style="font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:800;color:#fff;margin-bottom:10px">Acceso no autorizado</div>
+    <div style="color:rgba(255,255,255,.6);font-size:.9rem;line-height:1.7">
+      Este enlace de invitado no es válido, fue eliminado o fue desactivado por el administrador.<br><br>
+      <strong style="color:var(--mint)">Solicitá un nuevo enlace al administrador del sistema.</strong>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  FIX #3 — NO TOKEN SCREEN (direct URL, no token)
+  Shown when someone opens the URL without ?guest=
+  AND Firebase is already configured
+══════════════════════════════════════════════ -->
+<div id="noAccessScreen" class="fullscreen" style="display:none">
+  <div class="fs-box" style="text-align:center;max-width:440px">
+    <div class="fs-logo" style="justify-content:center;margin-bottom:6px">
+      <div class="fs-logo-icon">🎫</div>
+      Ticket<span style="color:var(--mint)">Active</span>
+    </div>
+    <div style="color:rgba(255,255,255,.5);font-size:.85rem;margin-bottom:22px">Panel de Administración</div>
+
+    <!-- PIN panel (default view) -->
+    <div id="pinPanel">
+      <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:24px;">
+        <div style="color:rgba(255,255,255,.85);font-size:.9rem;font-weight:600;margin-bottom:16px"> Ingresá tu PIN de 4 dígitos</div>
+        <div class="pin-dots" id="naPinDots">
+          <div class="pin-dot" id="nad0"></div>
+          <div class="pin-dot" id="nad1"></div>
+          <div class="pin-dot" id="nad2"></div>
+          <div class="pin-dot" id="nad3"></div>
+        </div>
+        <div class="pin-pad" style="max-width:220px;margin:0 auto">
+          <button class="pin-key" onclick="naKey('1')">1</button>
+          <button class="pin-key" onclick="naKey('2')">2</button>
+          <button class="pin-key" onclick="naKey('3')">3</button>
+          <button class="pin-key" onclick="naKey('4')">4</button>
+          <button class="pin-key" onclick="naKey('5')">5</button>
+          <button class="pin-key" onclick="naKey('6')">6</button>
+          <button class="pin-key" onclick="naKey('7')">7</button>
+          <button class="pin-key" onclick="naKey('8')">8</button>
+          <button class="pin-key" onclick="naKey('9')">9</button>
+          <button class="pin-key del" onclick="naKey('del')">⌫</button>
+          <button class="pin-key" onclick="naKey('0')">0</button>
+          <button class="pin-key del" onclick="naKey('clear')">✕</button>
+        </div>
+        <div class="pin-err" id="naPinErr"></div>
+      </div>
+      <!-- Recovery link -->
+      <div style="margin-top:18px">
+        <button onclick="showRecovery()" style="background:none;border:none;color:rgba(255,255,255,.45);font-size:.82rem;cursor:pointer;text-decoration:underline;font-family:'DM Sans',sans-serif;">
+          ¿Olvidaste el PIN? Recuperar acceso
+        </button>
+      </div>
+    </div>
+
+    <!-- Recovery panel (hidden by default) -->
+    <div id="recoveryPanel" style="display:none">
+      <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:24px;text-align:left">
+        <div style="color:rgba(255,255,255,.85);font-size:.9rem;font-weight:700;margin-bottom:4px">🔓 Recuperar acceso de administrador</div>
+        <div style="color:rgba(255,255,255,.5);font-size:.82rem;margin-bottom:18px;line-height:1.5">
+          Para resetear el sistema necesitás ingresar las credenciales de Firebase originales. Esto no borra los tickets ni los invitados.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="form-group">
+            <label style="color:rgba(255,255,255,.6);font-size:.75rem;text-transform:uppercase;letter-spacing:.5px">Database URL de Firebase</label>
+            <input id="rec_dbUrl" type="text" placeholder="https://mi-proyecto-rtdb.firebaseio.com"
+              style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:9px 13px;font-family:'DM Sans',sans-serif;font-size:.88rem;width:100%;outline:none;">
+          </div>
+          <div class="form-group">
+            <label style="color:rgba(255,255,255,.6);font-size:.75rem;text-transform:uppercase;letter-spacing:.5px">Nuevo PIN (4 dígitos)</label>
+            <input id="rec_newPin" type="password" maxlength="4" placeholder="Ej: 5678" inputmode="numeric"
+              style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:9px 13px;font-family:'DM Sans',sans-serif;font-size:.88rem;width:100%;outline:none;">
+          </div>
+        </div>
+        <div id="recErr" style="background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);color:#fca5a5;border-radius:8px;padding:9px 13px;font-size:.82rem;margin-top:10px;display:none"></div>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button onclick="hideRecovery()" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:rgba(255,255,255,.7);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.88rem;">
+            ← Volver
+          </button>
+          <button onclick="doRecovery()" style="flex:2;padding:10px;background:linear-gradient(135deg,var(--mint),var(--sky));border:none;border-radius:8px;color:var(--deep);font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:.88rem;">
+            🔓 Restablecer acceso
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  SETUP SCREEN (Firebase not configured yet)
+══════════════════════════════════════════════ -->
+<div id="setupScreen" class="fullscreen">
+  <div class="fs-box">
+    <div class="fs-logo">
+      <div class="fs-logo-icon">🎫</div>
+      Ticket<span style="color:var(--mint)">Active</span>
+    </div>
+    <div class="fs-sub">Configuración inicial — conectá con Firebase</div>
+
+    <div class="fs-step"><strong>Paso 1:</strong> Ir a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> → Crear proyecto</div>
+    <div class="fs-step"><strong>Paso 2:</strong> Ir a <strong>Realtime Database</strong> → Crear base de datos → Modo prueba</div>
+    <div class="fs-step"><strong>Paso 3:</strong> Reglas (Database → Rules):<br>
+      <code style="font-size:.78rem;background:rgba(0,0,0,.3);display:block;padding:8px;border-radius:6px;margin-top:6px;color:var(--mint)">{ "rules": { ".read": true, ".write": true } }</code>
+    </div>
+    <div class="fs-step"><strong>Paso 4:</strong> ⚙️ → Project settings → General → &lt;/&gt; → copiá el <code>firebaseConfig</code></div>
+    <div class="fs-step"><strong>Paso 5:</strong> Elegí un PIN de 4 dígitos para acceso de administrador</div>
+
+    <div id="setupErr" class="fs-err"></div>
+    <div class="fs-form">
+      <div class="form-group"><label>API Key</label><input id="s_apiKey" placeholder="AIzaSy..."></div>
+      <div class="form-group"><label>Auth Domain</label><input id="s_authDomain" placeholder="proyecto.firebaseapp.com"></div>
+      <div class="form-group"><label>Database URL</label><input id="s_dbUrl" placeholder="https://proyecto-rtdb.firebaseio.com"></div>
+      <div class="form-group"><label>Project ID</label><input id="s_projectId" placeholder="proyecto-12345"></div>
+      <div class="form-group">
+        <label>PIN de Administrador (4 dígitos)</label>
+        <input id="s_pin" type="password" maxlength="4" placeholder="Ej: 1234" inputmode="numeric">
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="saveFirebaseConfig()">
+        🔥 Conectar con Firebase
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text" id="loadingText">Conectando con Firebase...</div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  MAIN APP
+══════════════════════════════════════════════ -->
+<div id="mainApp" style="display:none">
+
+  <div id="dbStatusBar">
+    <div class="db-dot"></div>
+    <span id="dbStatusText">Conectado — datos en tiempo real</span>
+    <span class="realtime-pulse" style="margin-left:4px"></span>
+    <span style="margin-left:auto;opacity:.6;font-weight:400" id="dbProjectName"></span>
+  </div>
+
+  <header>
+    <div class="logo"><div class="logo-icon">🎫</div>Ticket<span class="logo-dot">Active</span></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="user-badge">
+        <div class="user-avatar" id="headerInitial">AD</div>
+        <span id="headerUserName">Administrador</span>
+        <span class="role-tag" id="headerRole">Admin</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="guest-banner" id="guestBanner" style="display:none">
+    🎫 <strong>Modo Invitado:</strong> Podés crear y ver tus propios tickets.
+  </div>
+
+  <div class="app-wrapper">
+    <!-- SIDEBAR — admin sees all, guest sees only create & my tickets -->
+    <aside class="sidebar" id="sidebarEl">
+      <div class="sidebar-title">Principal</div>
+      <button class="nav-item active" onclick="showPage('dashboard')" id="navDash"><span class="nav-icon">📊</span> Dashboard</button>
+      <button class="nav-item" onclick="showPage('tickets')" id="navTickets"><span class="nav-icon">🎫</span> <span id="navTicketsLabel">Tickets</span> <span class="nav-badge" id="badgeCount">0</span></button>
+      <button class="nav-item" onclick="showPage('crear')"><span class="nav-icon">➕</span> Crear Ticket</button>
+      <!-- Admin-only nav items -->
+      <div id="adminNav" style="display:none">
+        <div class="sidebar-sep"></div>
+        <div class="sidebar-title">Administración</div>
+        <button class="nav-item" onclick="showPage('accesos')"><span class="nav-icon">👥</span> Invitados <span class="nav-badge" id="badgeGuests">0</span></button>
+        <button class="nav-item" onclick="showPage('correo')"><span class="nav-icon">✉️</span> Notificaciones</button>
+        <button class="nav-item" onclick="showPage('exportar')"><span class="nav-icon">📥</span> Exportar</button>
+        <button class="nav-item" onclick="showPage('ajustes')"><span class="nav-icon">⚙️</span> Ajustes</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+
+      <!-- DASHBOARD -->
+      <div class="page active" id="page-dashboard">
+        <div class="page-header">
+          <div>
+            <div class="page-title" id="dashTitle">Dashboard</div>
+            <div class="page-subtitle" id="dashSubtitle">Resumen general <span class="realtime-pulse"></span></div>
+          </div>
+        </div>
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card c1"><div class="stat-label" id="statLabelTotal">Total Tickets</div><div class="stat-value" id="statTotal">—</div><div class="stat-icon">🎫</div></div>
+          <div class="stat-card c2"><div class="stat-label">Abiertos</div><div class="stat-value" id="statOpen">—</div><div class="stat-icon">📂</div></div>
+          <div class="stat-card c3"><div class="stat-label">En Progreso</div><div class="stat-value" id="statProgress">—</div><div class="stat-icon">⚙️</div></div>
+          <div class="stat-card c4"><div class="stat-label">Cerrados</div><div class="stat-value" id="statClosed">—</div><div class="stat-icon">✅</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header" id="recentTitle">Tickets Recientes</div>
+          <div class="table-wrap">
+            <table><thead><tr><th>#</th><th>Título</th><th>Prioridad</th><th>Estado</th><th>Solicitante</th><th>Fecha</th></tr></thead>
+            <tbody id="recentBody"><tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📭</div><p>Cargando...</p></div></td></tr></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TICKETS -->
+      <div class="page" id="page-tickets">
+        <div class="page-header">
+          <div><div class="page-title" id="ticketsPageTitle">Todos los Tickets</div><div class="page-subtitle">Actualizados en tiempo real</div></div>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-secondary" onclick="showPage('crear')">➕ Nuevo</button>
+            <button class="btn btn-primary" id="exportBtnList" style="display:none" onclick="exportExcel()">📥 Exportar</button>
+          </div>
+        </div>
+        <div class="filters-row">
+          <input type="text" id="filterSearch" placeholder="🔍 Buscar..." oninput="renderTickets()" style="flex:1;min-width:140px">
+          <select id="filterStatus" onchange="renderTickets()"><option value="">Todos los estados</option><option>Abierto</option><option>En Progreso</option><option>Cerrado</option></select>
+          <select id="filterPriority" onchange="renderTickets()"><option value="">Todas las prioridades</option><option>Urgente</option><option>Alta</option><option>Media</option><option>Baja</option></select>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="table-wrap">
+            <table><thead><tr><th>#</th><th>Título</th><th>Categoría</th><th>Prioridad</th><th>Estado</th><th>Solicitante</th><th>Fecha</th><th>Acciones</th></tr></thead>
+            <tbody id="ticketsBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- CREAR -->
+      <div class="page" id="page-crear">
+        <div class="page-header">
+          <div><div class="page-title">Crear Ticket</div><div class="page-subtitle">Se guardará en Firebase automáticamente</div></div>
+        </div>
+        <div class="card" id="createFormCard">
+          <div class="form-grid">
+            <div class="form-group full"><label>Título del Ticket *</label><input type="text" id="tTitulo" placeholder="Describí el problema brevemente"></div>
+            <div class="form-group full"><label>Descripción *</label><textarea id="tDesc" placeholder="Detallá el problema, pasos, contexto..."></textarea></div>
+            <div class="form-group"><label>Categoría *</label>
+              <select id="tCategoria">
+                <option value="">Seleccioná una categoría</option>
+                <option>Soporte Técnico CCTV</option><option>Creación de Usuario Alarma</option>
+                <option>Error de Sistema CCTV</option><option>Solicitud de Investigación</option><option>Consulta General</option><option>Otro</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Prioridad *</label>
+              <select id="tPrioridad"><option value="">Seleccioná prioridad</option><option>Urgente</option><option>Alta</option><option>Media</option><option>Baja</option></select>
+            </div>
+            <div class="form-group"><label>Nombre / Solicitante *</label><input type="text" id="tSolicitante" placeholder="Tu nombre completo"></div>
+            <div class="form-group"><label>Email de contacto *</label><input type="email" id="tEmail" placeholder="correo@ejemplo.com"></div>
+            <div class="form-group"><label>Email de jefatura * </label><input type="jefatura" id="tJefatura" placeholder= "correo@ejemplo.com"></div>
+          </div>
+          <div class="divider"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div id="emailStatusHint" style="font-size:.82rem;color:var(--text-soft)"></div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-secondary" onclick="clearForm()">🗑️ Limpiar</button>
+              <button class="btn btn-primary" id="createBtn" onclick="crearTicket()">✅ Crear Ticket</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INVITADOS (admin only) -->
+      <div class="page" id="page-accesos">
+        <div class="page-header">
+          <div><div class="page-title">Gestión de Invitados</div><div class="page-subtitle">Solo pueden crear y ver sus propios tickets</div></div>
+          <button class="btn btn-primary" onclick="openModal('modalInvitado')">👤 Nuevo Invitado</button>
+        </div>
+        <div id="guestsContainer"><div class="empty-state"><div class="empty-icon">👥</div><p>Cargando...</p></div></div>
+      </div>
+
+      <!-- NOTIFICACIONES (admin only) — FIX #4: hidden from guests -->
+      <div class="page" id="page-correo">
+        <div class="page-header"><div><div class="page-title">Notificaciones por Email</div><div class="page-subtitle">Configuración EmailJS</div></div></div>
+        <div class="cfg-card">
+          <div class="cfg-title">⚙️ EmailJS</div>
+          <div class="cfg-sub">Registrate en <strong style="color:var(--mint)">emailjs.com</strong> → creá servicio → plantilla → pegá los IDs.</div>
+          <div class="form-grid" style="gap:12px">
+            <div class="form-group"><label>Public Key</label><input type="password" id="cfgPublicKey" placeholder="abc123..." oninput="saveEmailConfig()"></div>
+            <div class="form-group"><label>Service ID</label><input type="password" id="cfgServiceId" placeholder="service_xxx" oninput="saveEmailConfig()"></div>
+            <div class="form-group full"><label>Template ID</label><input type="password" id="cfgTemplateId" placeholder="template_xxx" oninput="saveEmailConfig()"></div>
+          </div>
+          <div id="cfgStatus" class="cfg-status cfg-warn">⚠️ Incompleto</div>
+          <div style="margin-top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <input type="email" id="testEmailAddr" placeholder="tu@email.com para prueba"
+              style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:8px 12px;width:220px;font-size:.85rem;font-family:'DM Sans',sans-serif;">
+            <button class="btn btn-primary btn-sm" onclick="testEmail()" id="testBtn">📧 Prueba</button>
+          </div>
+          <div class="divider" style="border-color:rgba(255,255,255,.1);margin:16px 0"></div>
+          <div class="cfg-title" style="font-size:.92rem;margin-bottom:4px">👥 Destinatarios adicionales</div>
+          <div class="cfg-sub" style="margin-bottom:8px">Reciben copia en cada ticket nuevo.</div>
+          <div class="recipients-list" id="recipientsList"></div>
+          <button class="add-rec-btn" onclick="addRecipient()">＋ Agregar destinatario</button>
+          <div style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="saveRecipients()">💾 Guardar</button></div>
+        </div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header">📋 Variables para plantilla EmailJS</div>
+          <div class="vars-box">
+            <div><span>{{to_email}}</span> · <span>{{to_name}}</span> · <span>{{ticket_id}}</span> · <span>{{ticket_title}}</span></div>
+            <div><span>{{ticket_desc}}</span> · <span>{{ticket_category}}</span> · <span>{{ticket_priority}}</span> · <span>{{ticket_status}}</span></div>
+            <div><span>{{boss_email}}</span>· <span>{{requester_name}}</span> · <span>{{requester_email}}</span> · <span>{{ticket_date}}</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">📜 Log de envíos</div>
+          <div class="email-log" id="emailLog"></div>
+          <div style="margin-top:10px"><button class="btn btn-secondary btn-sm" onclick="clearLog()">🗑️ Limpiar</button></div>
+        </div>
+      </div>
+
+      <!-- EXPORTAR (admin only) -->
+      <div class="page" id="page-exportar">
+        <div class="page-header"><div><div class="page-title">Exportar a Excel</div></div></div>
+        <div class="card">
+          <div class="card-header">📊 Filtros</div>
+          <div class="form-grid">
+            <div class="form-group"><label>Estado</label><select id="expStatus"><option value="">Todos</option><option>Abierto</option><option>En Progreso</option><option>Cerrado</option></select></div>
+            <div class="form-group"><label>Prioridad</label><select id="expPriority"><option value="">Todas</option><option>Urgente</option><option>Alta</option><option>Media</option><option>Baja</option></select></div>
+            <div class="form-group"><label>Desde</label><input type="date" id="expFrom"></div>
+            <div class="form-group"><label>Hasta</label><input type="date" id="expTo"></div>
+          </div>
+          <div class="divider"></div>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button class="btn btn-secondary" onclick="previewExport()">👁️ Vista previa</button>
+            <button class="btn btn-primary" onclick="exportExcelFiltered()">📥 Descargar Excel</button>
+          </div>
+        </div>
+        <div id="previewSection" style="display:none;margin-top:20px">
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="table-wrap"><table><thead><tr><th>#</th><th>Título</th><th>Categoría</th><th>Prioridad</th><th>Estado</th><th>Solicitante</th><th>Email</th><th>Fecha</th></tr></thead><tbody id="previewBody"></tbody></table></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AJUSTES (admin only) — FIX #4: credentials hidden from guests -->
+      <div class="page" id="page-ajustes">
+        <div class="page-header"><div><div class="page-title">Ajustes</div><div class="page-subtitle">Configuración de Firebase, seguridad y admins</div></div></div>
+
+        <!-- ── ADMIN USERS ── -->
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header" style="justify-content:space-between">
+            <span>👨‍💼 Usuarios Administradores</span>
+            <button class="btn btn-primary btn-sm" onclick="openModal('modalNuevoAdmin')">+ Nuevo Admin</button>
+          </div>
+          <p style="font-size:.85rem;color:var(--text-soft);margin-bottom:16px">
+            Los administradores tienen acceso completo al panel. Cada uno recibe un enlace único que abre la app directamente sin necesidad de PIN.
+          </p>
+          <div id="adminUsersList">
+            <div class="empty-state" style="padding:30px 20px"><div class="empty-icon" style="font-size:2rem">👨‍💼</div><p>Solo existe el admin principal (PIN). Agregá admins adicionales arriba.</p></div>
+          </div>
+        </div>
+
+        <!-- ── FIREBASE CONFIG ── -->
+        <div class="cfg-card" style="margin-bottom:20px">
+          <div class="cfg-title">🔥 Firebase — cambiar proyecto</div>
+          <div class="cfg-sub">Modificar estos datos afectará a todos los usuarios.</div>
+          <div class="form-grid" style="gap:12px">
+            <div class="form-group"><label>API Key</label><input type="password" id="fb_apiKey"></div>
+            <div class="form-group"><label>Auth Domain</label><input type="password" id="fb_authDomain"></div>
+            <div class="form-group full"><label>Database URL</label><input type="password" id="fb_dbUrl"></div>
+            <div class="form-group"><label>Project ID</label><input id="fb_projectId"></div>
+            <div class="form-group"><label>Nuevo PIN de Administrador principal</label><input type="password" id="fb_newPin" maxlength="4" placeholder="Dejar vacío para no cambiar" inputmode="numeric"></div>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="updateFirebaseConfig()">💾 Guardar cambios</button>
+            <button class="btn btn-danger btn-sm" onclick="resetConfig()">🗑️ Restablecer todo</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">ℹ️ Estado de conexión</div>
+          <div id="fbStatusDetail" style="font-size:.9rem;color:var(--text-soft);line-height:1.9"></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div><!-- /mainApp -->
+
+<!-- MODAL DETALLE/EDIT -->
+<div class="modal-overlay" id="modalDetalle">
+  <div class="modal">
+    <div class="modal-title">📋 Detalle del Ticket</div>
+    <div id="detalleContent"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modalDetalle')">Cerrar</button>
+      <button class="btn btn-primary" id="saveEditBtn" onclick="saveEdit()" style="display:none">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL INVITADO -->
+<div class="modal-overlay" id="modalInvitado">
+  <div class="modal">
+    <div class="modal-title">👤 Agregar Invitado</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group"><label>Nombre completo *</label><input type="text" id="gNombre" placeholder="María López"></div>
+      <div class="form-group"><label>Email *</label><input type="email" id="gEmail" placeholder="maria@empresa.com"></div>
+      <div class="form-group"><label>Nota (opcional)</label><input type="text" id="gNota" placeholder="Área de Ventas"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modalInvitado')">Cancelar</button>
+      <button class="btn btn-primary" onclick="agregarInvitado()">✅ Generar Acceso</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LINK -->
+<div class="modal-overlay" id="modalLink">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">🔗 Enlace de Acceso</div>
+    <p style="color:var(--text-soft);font-size:.9rem;margin-bottom:14px">Compartí este enlace. El invitado solo verá sus propios tickets.</p>
+    <div style="background:var(--gray-100);border:1px dashed var(--gray-200);border-radius:10px;padding:12px;font-family:monospace;font-size:.8rem;word-break:break-all;color:var(--text-soft);cursor:pointer" id="generatedLink" onclick="copyLink()"></div>
+    <p style="font-size:.75rem;color:var(--gray-400);margin-top:6px">Clic en el cuadro para copiar</p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="copyLink()">📋 Copiar</button>
+      <button class="btn btn-primary" onclick="closeModal('modalLink')">Listo</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVO ADMIN -->
+<div class="modal-overlay" id="modalNuevoAdmin">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">👨‍💼 Agregar Administrador</div>
+    <p style="color:var(--text-soft);font-size:.88rem;margin-bottom:20px">
+      Los administradores tienen acceso completo al panel. Se genera un enlace único que los autentica automáticamente al abrirlo.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group"><label>Nombre completo *</label><input type="text" id="aNombre" placeholder="Ej: Carlos Pérez"></div>
+      <div class="form-group"><label>Email *</label><input type="email" id="aEmail" placeholder="carlos@empresa.com"></div>
+      <div class="form-group"><label>Nota (opcional)</label><input type="text" id="aNota" placeholder="Ej: Jefe de Soporte"></div>
+    </div>
+    <div style="background:var(--sky-pale);border:1px solid var(--sky-light);border-radius:10px;padding:12px 14px;font-size:.83rem;color:#0369a1;margin-top:16px;line-height:1.5">
+      🔒 El enlace generado incluye un token seguro. Compartilo <strong>solo</strong> con la persona indicada. Si se compromete, podés eliminarlo desde esta pantalla.
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modalNuevoAdmin')">Cancelar</button>
+      <button class="btn btn-primary" onclick="agregarAdmin()">🔑 Generar Enlace Admin</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LINK ADMIN -->
+<div class="modal-overlay" id="modalAdminLink">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-title">Enlace de Administrador Generado</div>
+    <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;font-size:.83rem;color:#92400e;margin-bottom:16px">
+      ⚠️ <strong>Guardá este enlace ahora.</strong> Da acceso completo al panel de administración. Compartilo solo con la persona indicada.
+    </div>
+    <div style="background:var(--gray-100);border:1px dashed var(--gray-200);border-radius:10px;padding:12px;font-family:monospace;font-size:.78rem;word-break:break-all;color:var(--text-soft);cursor:pointer;line-height:1.6" id="adminLinkUrl" onclick="copyAdminLink()"></div>
+    <p style="font-size:.75rem;color:var(--gray-400);margin-top:6px">Clic en el cuadro para copiar</p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="copyAdminLink()">📋 Copiar enlace</button>
+      <button class="btn btn-primary" onclick="closeModal('modalAdminLink')">Listo</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CONFIG & INIT
+// ══════════════════════════════════════════════════════════════
+let db = null;
+let fbCfg = JSON.parse(localStorage.getItem('tf_fbcfg') || 'null');
+let ADMIN_PIN = localStorage.getItem('tf_pin') || null;
+
+// ── FIX #3: Determine access mode BEFORE showing anything ──
+const urlParams   = new URLSearchParams(window.location.search);
+const GUEST_TOKEN = urlParams.get('guest');
+const ADMIN_TOKEN = urlParams.get('admin');
+const IS_DIRECT   = !GUEST_TOKEN && !ADMIN_TOKEN;
+
+function saveFirebaseConfig() {
+  const apiKey      = document.getElementById('s_apiKey').value.trim();
+  const authDomain  = document.getElementById('s_authDomain').value.trim();
+  const databaseURL = document.getElementById('s_dbUrl').value.trim();
+  const projectId   = document.getElementById('s_projectId').value.trim();
+  const pin         = document.getElementById('s_pin').value.trim();
+
+  if (!apiKey||!authDomain||!databaseURL||!projectId) { showSetupErr('Completá los campos de Firebase'); return; }
+  if (!databaseURL.startsWith('https://')) { showSetupErr('La Database URL debe empezar con https://'); return; }
+  if (!pin||pin.length!==4||!/^\d+$/.test(pin)) { showSetupErr('El PIN debe ser exactamente 4 dígitos'); return; }
+
+  const cfg = { apiKey, authDomain, databaseURL, projectId };
+  localStorage.setItem('tf_fbcfg', JSON.stringify(cfg));
+  localStorage.setItem('tf_pin', pin);
+  fbCfg = cfg;
+  ADMIN_PIN = pin;
+  initFirebase(cfg, 'admin');
+}
+
+function showSetupErr(msg) {
+  const el = document.getElementById('setupErr');
+  el.textContent = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+
+function initFirebase(cfg, role) {
+  showLoading('Conectando con Firebase...');
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    db = firebase.database();
+    db.ref('.info/connected').on('value', snap => updateDbStatus(snap.val()));
+    document.getElementById('setupScreen').style.display = 'none';
+    document.getElementById('noAccessScreen').style.display = 'none';
+    hideLoading();
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('dbProjectName').textContent = cfg.projectId;
+    bootApp(role);
+  } catch(e) {
+    hideLoading();
+    showSetupErr('Error al conectar: ' + e.message);
+  }
+}
+
+function updateDbStatus(connected) {
+  const bar = document.getElementById('dbStatusBar');
+  const txt = document.getElementById('dbStatusText');
+  bar.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px 32px;font-size:.78rem;font-weight:600;border-bottom:1px solid ${connected?'var(--gray-200)':'#fde68a'};background:${connected?'var(--mint-pale)':'#fef3c7'};color:${connected?'var(--teal)':'#92400e'};`;
+  txt.textContent = connected ? 'Conectado — datos en tiempo real' : 'Sin conexión — modo offline';
+}
+
+function updateFirebaseConfig() {
+  const apiKey      = document.getElementById('fb_apiKey').value.trim();
+  const authDomain  = document.getElementById('fb_authDomain').value.trim();
+  const databaseURL = document.getElementById('fb_dbUrl').value.trim();
+  const projectId   = document.getElementById('fb_projectId').value.trim();
+  const newPin      = document.getElementById('fb_newPin').value.trim();
+  if (!apiKey||!authDomain||!databaseURL||!projectId) { toast('⚠️ Completá todos los campos','#f97316'); return; }
+  const cfg = { apiKey, authDomain, databaseURL, projectId };
+  localStorage.setItem('tf_fbcfg', JSON.stringify(cfg));
+  if (newPin) {
+    if (!/^\d{4}$/.test(newPin)) { toast('⚠️ El PIN debe ser 4 dígitos','#f97316'); return; }
+    localStorage.setItem('tf_pin', newPin);
+  }
+  toast('✅ Configuración guardada — recargando...');
+  setTimeout(() => location.reload(), 1200);
+}
+
+function resetConfig() {
+  if (!confirm('¿Restablecer toda la configuración? Se borrarán Firebase, PIN y EmailJS.')) return;
+  ['tf_fbcfg','tf_pin','tf_emailcfg','tf_recipients','tf_emaillog'].forEach(k => localStorage.removeItem(k));
+  location.reload();
+}
+
+// ══════════════════════════════════════════════════════════════
+// ADMIN USERS — shared admin access via secure token links
+// ══════════════════════════════════════════════════════════════
+function generateAdminToken() {
+  // Simple but hard-to-guess token: timestamp + random
+  const rand = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2,'0')).join('');
+  return 'adm_' + rand;
+}
+
+async function agregarAdmin() {
+  const name  = document.getElementById('aNombre').value.trim();
+  const email = document.getElementById('aEmail').value.trim();
+  const nota  = document.getElementById('aNota').value.trim();
+  if (!name || !email) { toast('⚠️ Nombre y email requeridos','#f97316'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠️ Email inválido','#f97316'); return; }
+
+  const token = generateAdminToken();
+  const adminData = {
+    name, email, nota, token,
+    role: 'admin',
+    active: true,
+    created: new Date().toLocaleDateString('es-CR'),
+    createdTs: Date.now()
+  };
+
+  try {
+    await db.ref('adminUsers').push(adminData);
+    closeModal('modalNuevoAdmin');
+    ['aNombre','aEmail','aNota'].forEach(id => document.getElementById(id).value = '');
+    showAdminLink(token);
+    toast('✅ Admin agregado — enlace generado');
+  } catch(e) { toast('❌ Error: ' + e.message, '#ef4444'); }
+}
+
+function showAdminLink(token) {
+  const base = window.location.href.split('?')[0];
+  const link = base + '?admin=' + token;
+  document.getElementById('adminLinkUrl').textContent = link;
+  openModal('modalAdminLink');
+}
+
+function copyAdminLink() {
+  navigator.clipboard.writeText(document.getElementById('adminLinkUrl').textContent)
+    .then(() => toast('📋 Enlace de admin copiado'));
+}
+
+async function toggleAdmin(key) {
+  const a = adminUsers[key]; if (!a) return;
+  try {
+    await db.ref('adminUsers/' + key).update({ active: !a.active });
+    toast(a.active ? '⛔ Acceso de admin desactivado' : '✅ Admin activado');
+  } catch(e) { toast('❌ Error: ' + e.message, '#ef4444'); }
+}
+
+async function deleteAdmin(key) {
+  if (!confirm('¿Eliminar este administrador? Su enlace dejará de funcionar inmediatamente.')) return;
+  try {
+    await db.ref('adminUsers/' + key).remove();
+    toast('🗑️ Admin eliminado — enlace bloqueado', '#ef4444');
+  } catch(e) { toast('❌ Error: ' + e.message, '#ef4444'); }
+}
+
+function showAdminLinkFromKey(key) {
+  const a = adminUsers[key]; if (!a) return;
+  showAdminLink(a.token);
+}
+
+function renderAdminUsers() {
+  const el = document.getElementById('adminUsersList'); if (!el) return;
+  const arr = Object.entries(adminUsers).map(([k, a]) => ({...a, _key: k}));
+  if (!arr.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:30px 20px"><div class="empty-icon" style="font-size:2rem">👨‍💼</div><p>Solo existe el admin principal (PIN). Agregá admins adicionales arriba.</p></div>';
+    return;
+  }
+  el.innerHTML = arr.map(a => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid var(--gray-200);border-radius:12px;margin-bottom:8px;background:${a.active?'rgba(255,255,255,.9)':'#f9fafb'}">
+      <div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,${a.active?'var(--mint),var(--sky)':'#d1d5db,#9ca3af'});display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;color:${a.active?'var(--deep)':'#fff'};font-size:.85rem;flex-shrink:0">
+        ${initials(a.name)}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;color:var(--deep);font-size:.92rem;display:flex;align-items:center;gap:8px">
+          ${esc(a.name)}
+          <span style="font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:20px;background:${a.active?'var(--mint-pale)':'#f3f4f6'};color:${a.active?'var(--teal)':'#6b7280'}">${a.active?'● Activo':'○ Inactivo'}</span>
+        </div>
+        <div style="font-size:.8rem;color:var(--text-soft)">${esc(a.email)}${a.nota?` · <em>${esc(a.nota)}</em>`:''}</div>
+        <div style="font-size:.74rem;color:var(--gray-400);margin-top:2px">Creado: ${a.created}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-sm btn-secondary" onclick="showAdminLinkFromKey('${a._key}')" title="Ver enlace">🔗</button>
+        <button class="btn btn-sm ${a.active?'btn-secondary':'btn-primary'}" onclick="toggleAdmin('${a._key}')">${a.active?'⛔':'✅'}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteAdmin('${a._key}')">🗑️</button>
+      </div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// FIX #3 — NO-ACCESS PIN SCREEN
+// ══════════════════════════════════════════════════════════════
+let naPin = '';
+function naKey(v) {
+  if (v === 'del')   { naPin = naPin.slice(0,-1); }
+  else if (v === 'clear') { naPin = ''; }
+  else if (naPin.length < 4) { naPin += v; }
+  // Update dots
+  for (let i=0;i<4;i++) {
+    document.getElementById('nad'+i).className = 'pin-dot' + (i<naPin.length?' filled':'');
+  }
+  document.getElementById('naPinErr').textContent = '';
+  if (naPin.length === 4) {
+    if (naPin === ADMIN_PIN) {
+      document.getElementById('noAccessScreen').style.display = 'none';
+      showLoading('Cargando panel de administración...');
+      initFirebase(fbCfg, 'admin');
+    } else {
+      document.getElementById('naPinErr').textContent = 'PIN incorrecto. Intentá nuevamente.';
+      naPin = '';
+      for (let i=0;i<4;i++) document.getElementById('nad'+i).className='pin-dot';
+    }
+  }
+}
+
+function showRecovery(){
+  document.getElementById('pinPanel').style.display='none';
+  document.getElementById('recoveryPanel').style.display='block';
+  document.getElementById('recErr').style.display='none';
+}
+function hideRecovery(){
+  document.getElementById('recoveryPanel').style.display='none';
+  document.getElementById('pinPanel').style.display='block';
+  naPin='';
+  for(let i=0;i<4;i++) document.getElementById('nad'+i).className='pin-dot';
+  document.getElementById('naPinErr').textContent='';
+}
+function doRecovery(){
+  const dbUrl  = document.getElementById('rec_dbUrl').value.trim();
+  const newPin = document.getElementById('rec_newPin').value.trim();
+  const errEl  = document.getElementById('recErr');
+
+  if(!dbUrl){ errEl.textContent='⚠️ Ingresá la Database URL de Firebase'; errEl.style.display='block'; return; }
+  if(!dbUrl.startsWith('https://')){ errEl.textContent='⚠️ La URL debe empezar con https://'; errEl.style.display='block'; return; }
+  if(!newPin||newPin.length!==4||!/^\d+$/.test(newPin)){ errEl.textContent='⚠️ El nuevo PIN debe ser exactamente 4 dígitos'; errEl.style.display='block'; return; }
+
+  // Verify the entered Database URL matches the stored config
+  const stored = JSON.parse(localStorage.getItem('tf_fbcfg')||'null');
+  if(!stored){ errEl.textContent='⚠️ No hay configuración guardada. Recargá la página para configurar desde cero.'; errEl.style.display='block'; return; }
+  if(stored.databaseURL.trim() !== dbUrl){ errEl.textContent='⚠️ La Database URL no coincide con la configuración guardada.'; errEl.style.display='block'; return; }
+
+  // URL matches — update PIN
+  localStorage.setItem('tf_pin', newPin);
+  ADMIN_PIN = newPin;
+  hideRecovery();
+  document.getElementById('naPinErr').textContent='';
+  // Show confirmation briefly then allow login
+  const err = document.getElementById('naPinErr');
+  err.style.color='var(--mint)';
+  err.textContent='✅ PIN actualizado. Ingresalo ahora.';
+  setTimeout(()=>{ err.textContent=''; err.style.color=''; }, 3000);
+}
+
+// ══════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════
+let tickets = {};
+let guests   = {};
+let adminUsers = {};
+let editingKey = null;
+let currentUser = { name:'Administrador', role:'admin', email:'admin@ticketflow.com' };
+let emailCfg = JSON.parse(localStorage.getItem('tf_emailcfg') || '{}');
+let emailRecipients = JSON.parse(localStorage.getItem('tf_recipients') || '[]');
+let emailLogArr = JSON.parse(localStorage.getItem('tf_emaillog') || '[]');
+
+// ══════════════════════════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════════════════════════
+function bootApp(role) {
+  if (role === 'adminToken') {
+    // Validate admin token against Firebase first
+    db.ref('adminUsers').once('value', snap => {
+      const all = snap.val() || {};
+      const found = Object.values(all).find(a => a.token === ADMIN_TOKEN);
+      if (!found || !found.active) {
+        document.getElementById('mainApp').style.display = 'none';
+        hideLoading();
+        document.getElementById('blockedScreen').style.display = 'flex';
+        return;
+      }
+      currentUser = { name: found.name, role: 'admin', email: found.email };
+      _bootAdminUI();
+    });
+    return;
+  }
+
+  if (role === 'admin') {
+    currentUser = { name:'Administrador', role:'admin', email:'admin@ticketflow.com' };
+    _bootAdminUI();
+    return;
+  }
+
+  // ── GUEST ──
+  db.ref('guests').once('value', snap => {
+    const allGuests = snap.val() || {};
+    guests = allGuests;
+    const found = Object.values(allGuests).find(g => g.token === GUEST_TOKEN);
+    if (!found || !found.active) {
+      document.getElementById('mainApp').style.display = 'none';
+      document.getElementById('blockedScreen').style.display = 'flex';
+      return;
+    }
+    currentUser = { name: found.name, role: 'guest', email: found.email, token: GUEST_TOKEN };
+    document.getElementById('guestBanner').style.display = 'flex';
+    document.getElementById('adminNav').style.display = 'none';
+    document.getElementById('exportBtnList').style.display = 'none';
+    document.getElementById('headerInitial').textContent = initials(found.name);
+    document.getElementById('headerUserName').textContent = found.name;
+    document.getElementById('headerRole').textContent = 'Invitado';
+    document.getElementById('headerRole').style.background = 'linear-gradient(90deg,var(--sky),#a78bfa)';
+    document.getElementById('tSolicitante').value = found.name;
+    document.getElementById('tEmail').value = found.email;
+    document.getElementById('navTicketsLabel').textContent = 'Mis Tickets';
+    document.getElementById('dashTitle').textContent = 'Mis Tickets';
+    document.getElementById('dashSubtitle').textContent = 'Solo tus solicitudes';
+    document.getElementById('statLabelTotal').textContent = 'Mis Tickets';
+    document.getElementById('ticketsPageTitle').textContent = 'Mis Tickets';
+    document.getElementById('recentTitle').textContent = '🕐 Mis Tickets Recientes';
+    db.ref('tickets').orderByChild('guestToken').equalTo(GUEST_TOKEN).on('value', snap => {
+      tickets = snap.val() || {};
+      renderDashboard(); renderTickets(); updateBadge();
+    });
+    loadEmailConfigFields();
+    updateCreateHint();
+    showPage('crear');
+  });
+}
+
+function _bootAdminUI() {
+  document.getElementById('adminNav').style.display = 'block';
+  document.getElementById('exportBtnList').style.display = '';
+  document.getElementById('navTicketsLabel').textContent = 'Todos los Tickets';
+  document.getElementById('dashTitle').textContent = 'Dashboard';
+  document.getElementById('ticketsPageTitle').textContent = 'Todos los Tickets';
+  document.getElementById('headerInitial').textContent = initials(currentUser.name);
+  document.getElementById('headerUserName').textContent = currentUser.name;
+  document.getElementById('headerRole').textContent = 'Admin';
+  hideLoading();
+  if (fbCfg) {
+    setVal('fb_apiKey', fbCfg.apiKey);
+    setVal('fb_authDomain', fbCfg.authDomain);
+    setVal('fb_dbUrl', fbCfg.databaseURL);
+    setVal('fb_projectId', fbCfg.projectId);
+    document.getElementById('fbStatusDetail').innerHTML =
+      `<strong>Proyecto:</strong> ${fbCfg.projectId}<br><strong>Database:</strong> ${fbCfg.databaseURL}<br><strong>Sesión:</strong> <span style="color:var(--teal)">✅ ${esc(currentUser.name)}</span>`;
+  }
+  db.ref('tickets').on('value', snap => {
+    tickets = snap.val() || {};
+    renderDashboard(); renderTickets(); updateBadge();
+  });
+  db.ref('guests').on('value', snap => {
+    guests = snap.val() || {};
+    document.getElementById('badgeGuests').textContent = Object.keys(guests).length;
+    if (document.getElementById('page-accesos').classList.contains('active')) renderGuests();
+  });
+  db.ref('adminUsers').on('value', snap => {
+    adminUsers = snap.val() || {};
+    if (document.getElementById('page-ajustes').classList.contains('active')) renderAdminUsers();
+  });
+  loadEmailConfigFields();
+  updateCreateHint();
+}
+
+function setVal(id, v) { const el=document.getElementById(id); if(el&&v) el.value=v; }
+
+// ══════════════════════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════════════════════
+function showPage(id) {
+  // FIX #4: block guests from reaching admin-only pages
+  const adminOnly = ['accesos','correo','exportar','ajustes'];
+  if (currentUser.role==='guest' && adminOnly.includes(id)) return;
+
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const pg=document.getElementById('page-'+id);
+  if(pg) pg.classList.add('active');
+  const btn=[...document.querySelectorAll('.nav-item')].find(b=>b.getAttribute('onclick')?.includes("'"+id+"'"));
+  if(btn) btn.classList.add('active');
+  if(id==='dashboard') renderDashboard();
+  if(id==='tickets')   renderTickets();
+  if(id==='accesos')   renderGuests();
+  if(id==='correo')    initEmailPage();
+  if(id==='ajustes')   renderAdminUsers();
+}
+
+function updateBadge() {
+  document.getElementById('badgeCount').textContent = Object.keys(tickets).length;
+}
+
+// ══════════════════════════════════════════════════════════════
+// CREATE TICKET
+// ══════════════════════════════════════════════════════════════
+async function crearTicket() {
+  const titulo    = document.getElementById('tTitulo').value.trim();
+  const desc      = document.getElementById('tDesc').value.trim();
+  const categoria = document.getElementById('tCategoria').value;
+  const prioridad = document.getElementById('tPrioridad').value;
+  const solicit   = document.getElementById('tSolicitante').value.trim()||currentUser.name;
+  const email     = document.getElementById('tEmail').value.trim()||currentUser.email;
+
+  if (!titulo||!desc||!categoria||!prioridad||!solicit||!email) { toast('⚠️ Completá todos los campos','#f97316'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('⚠️ Email inválido','#f97316'); return; }
+
+  const btn=document.getElementById('createBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Guardando...';
+
+  const now=new Date();
+  const t = {
+    titulo, desc, categoria, prioridad, solicit, email,
+    estado:'Abierto',
+    fecha:now.toLocaleString('es-CR',{dateStyle:'short',timeStyle:'short'}),
+    fechaRaw:now.toISOString(),
+    // FIX #2: tag ticket with guest token so we can filter later
+    guestToken: currentUser.role==='guest' ? GUEST_TOKEN : 'admin',
+    creadoPor: currentUser.role,
+  };
+
+  try {
+    const ref = await db.ref('tickets').push(t);
+    clearForm();
+    if (isEmailConfigured()) {
+      btn.innerHTML='<span class="spinner"></span> Enviando correos...';
+      await sendTicketEmails({...t, id:ref.key});
+      toast('✅ Ticket creado y correos enviados');
+    } else {
+      toast('✅ Ticket guardado en Firebase');
+    }
+    if (currentUser.role!=='guest') showPage('tickets');
+    else {
+      document.getElementById('createFormCard').innerHTML=`
+        <div style="text-align:center;padding:40px 20px">
+          <div style="font-size:4rem;margin-bottom:14px">🎉</div>
+          <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--deep);margin-bottom:8px">¡Ticket Enviado!</div>
+          <div style="color:var(--text-soft);margin-bottom:24px">Tu solicitud fue registrada. El equipo te contactará pronto.</div>
+          <button class="btn btn-primary" onclick="location.reload()">Crear otro ticket</button>
+        </div>`;
+    }
+  } catch(e) { toast('❌ Error: '+e.message,'#ef4444'); }
+  btn.disabled=false; btn.innerHTML='✅ Crear Ticket';
+}
+
+function clearForm() {
+  ['tTitulo','tDesc','tCategoria','tPrioridad','tSolicitante','tEmail'].forEach(id=>{
+    const el=document.getElementById(id); if(!el)return;
+    el.tagName==='SELECT'?el.selectedIndex=0:(el.value='');
+  });
+  if(currentUser.role==='guest'){
+    document.getElementById('tSolicitante').value=currentUser.name;
+    document.getElementById('tEmail').value=currentUser.email;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD — FIX #2: guest sees only own stats
+// ══════════════════════════════════════════════════════════════
+function renderDashboard() {
+  const arr = Object.values(tickets);
+  document.getElementById('statTotal').textContent    = arr.length;
+  document.getElementById('statOpen').textContent     = arr.filter(t=>t.estado==='Abierto').length;
+  document.getElementById('statProgress').textContent = arr.filter(t=>t.estado==='En Progreso').length;
+  document.getElementById('statClosed').textContent   = arr.filter(t=>t.estado==='Cerrado').length;
+  const body=document.getElementById('recentBody');
+  const sorted=[...arr].sort((a,b)=>new Date(b.fechaRaw)-new Date(a.fechaRaw)).slice(0,6);
+  if(!sorted.length){body.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📭</div><p>Aún no hay tickets</p></div></td></tr>';return;}
+  body.innerHTML=sorted.map(t=>`
+    <tr>
+      <td><strong style="color:var(--teal)">#${sid(t)}</strong></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.titulo)}</td>
+      <td>${priBadge(t.prioridad)}</td><td>${staBadge(t.estado)}</td>
+      <td style="font-size:.85rem">${esc(t.solicit)}</td>
+      <td style="font-size:.8rem;color:var(--text-soft)">${t.fecha}</td>
+    </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// TICKETS LIST — FIX #2: guest sees only own tickets
+// ══════════════════════════════════════════════════════════════
+function renderTickets() {
+  const s  =(document.getElementById('filterSearch')?.value||'').toLowerCase();
+  const ef =document.getElementById('filterStatus')?.value||'';
+  const pf =document.getElementById('filterPriority')?.value||'';
+  let arr=Object.entries(tickets).map(([k,t])=>({...t,_key:k}));
+  arr=arr.filter(t=>
+    (!s||t.titulo.toLowerCase().includes(s)||t.solicit.toLowerCase().includes(s)||sid(t).toLowerCase().includes(s))&&
+    (!ef||t.estado===ef)&&(!pf||t.prioridad===pf)
+  );
+  arr.sort((a,b)=>new Date(b.fechaRaw)-new Date(a.fechaRaw));
+  const body=document.getElementById('ticketsBody');
+  if(!body)return;
+  if(!arr.length){body.innerHTML='<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🔍</div><p>No hay tickets que coincidan</p></div></td></tr>';return;}
+  const isAdmin=currentUser.role==='admin';
+  body.innerHTML=arr.map(t=>`
+    <tr>
+      <td><strong style="color:var(--teal)">#${sid(t)}</strong></td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.titulo)}">${esc(t.titulo)}</td>
+      <td style="font-size:.82rem;color:var(--text-soft)">${t.categoria}</td>
+      <td>${priBadge(t.prioridad)}</td><td>${staBadge(t.estado)}</td>
+      <td style="font-size:.85rem">${esc(t.solicit)}</td>
+      <td style="font-size:.8rem;color:var(--text-soft)">${t.fecha}</td>
+      <td><div style="display:flex;gap:5px">
+        ${isAdmin?`<button class="btn btn-sm btn-secondary" onclick="editTicket('${t._key}')">✏️</button><button class="btn btn-sm btn-danger" onclick="deleteTicket('${t._key}')">🗑️</button>`
+                 :`<button class="btn btn-sm btn-secondary" onclick="viewTicket('${t._key}')">👁️</button>`}
+      </div></td>
+    </tr>`).join('');
+}
+
+function sid(t){ return t._key ? t._key.slice(-5).toUpperCase() : '?????'; }
+
+// ══════════════════════════════════════════════════════════════
+// TICKET ACTIONS
+// ══════════════════════════════════════════════════════════════
+function editTicket(key){
+  const t=tickets[key];if(!t)return;
+  editingKey=key;
+  document.getElementById('detalleContent').innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group"><label>Título</label><input id="eT" value="${esc(t.titulo)}"></div>
+      <div class="form-group"><label>Descripción</label><textarea id="eD">${esc(t.desc)}</textarea></div>
+      <div class="form-group"><label>Categoría</label><select id="eC">${['Soporte Técnico','Facturación','Consulta General','Error de Sistema','Solicitud de Feature','Recursos Humanos','Otro'].map(c=>`<option${c===t.categoria?' selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Prioridad</label><select id="eP">${['Urgente','Alta','Media','Baja'].map(p=>`<option${p===t.prioridad?' selected':''}>${p}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Estado</label><select id="eE">${['Abierto','En Progreso','Cerrado'].map(s=>`<option${s===t.estado?' selected':''}>${s}</option>`).join('')}</select></div>
+    </div>`;
+  document.getElementById('saveEditBtn').style.display='';
+  openModal('modalDetalle');
+}
+
+function viewTicket(key){
+  const t=tickets[key];if(!t)return;
+  editingKey=null;
+  document.getElementById('detalleContent').innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><strong>#${sid({_key:key})}</strong>${staBadge(t.estado)}</div>
+    <p style="font-size:1rem;font-weight:600;color:var(--deep)">${esc(t.titulo)}</p>
+    <p style="color:var(--text-soft);margin-top:8px;font-size:.9rem">${esc(t.desc)}</p>
+    <div class="divider"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:.85rem">
+      <div><strong>Categoría:</strong> ${t.categoria}</div><div><strong>Prioridad:</strong> ${priBadge(t.prioridad)}</div>
+      <div><strong>Solicitante:</strong> ${esc(t.solicit)}</div><div><strong>Email:</strong> ${esc(t.email)}</div>
+      <div><strong>Fecha:</strong> ${t.fecha}</div>
+    </div>`;
+  document.getElementById('saveEditBtn').style.display='none';
+  openModal('modalDetalle');
+}
+
+async function saveEdit(){
+  if(!editingKey)return;
+  const updates={titulo:document.getElementById('eT').value.trim(),desc:document.getElementById('eD').value.trim(),categoria:document.getElementById('eC').value,prioridad:document.getElementById('eP').value,estado:document.getElementById('eE').value};
+  try{ await db.ref('tickets/'+editingKey).update(updates); closeModal('modalDetalle'); toast('✅ Ticket actualizado'); }
+  catch(e){ toast('❌ Error: '+e.message,'#ef4444'); }
+}
+
+async function deleteTicket(key){
+  if(!confirm('¿Eliminar este ticket?'))return;
+  try{ await db.ref('tickets/'+key).remove(); toast('🗑️ Ticket eliminado','#ef4444'); }
+  catch(e){ toast('❌ Error: '+e.message,'#ef4444'); }
+}
+
+// ══════════════════════════════════════════════════════════════
+// GUESTS — FIX #1: delete invalidates link immediately
+// ══════════════════════════════════════════════════════════════
+function generateToken(){ return 'g_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
+
+async function agregarInvitado(){
+  const name=document.getElementById('gNombre').value.trim();
+  const email=document.getElementById('gEmail').value.trim();
+  const nota=document.getElementById('gNota').value.trim();
+  if(!name||!email){toast('⚠️ Nombre y email requeridos','#f97316');return;}
+  const token=generateToken();
+  try{
+    await db.ref('guests').push({name,email,nota,token,active:true,created:new Date().toLocaleDateString('es-CR')});
+    closeModal('modalInvitado');
+    ['gNombre','gEmail','gNota'].forEach(id=>document.getElementById(id).value='');
+    showGuestLink(token);
+    toast('✅ Invitado agregado');
+  }catch(e){toast('❌ Error: '+e.message,'#ef4444');}
+}
+
+function showGuestLink(token){
+  const link=window.location.href.split('?')[0]+'?guest='+token;
+  document.getElementById('generatedLink').textContent=link;
+  openModal('modalLink');
+}
+
+function copyLink(){
+  navigator.clipboard.writeText(document.getElementById('generatedLink').textContent)
+    .then(()=>toast('📋 Enlace copiado'));
+}
+
+// FIX #1: toggle just sets active=false in Firebase, link validation catches it in bootApp
+async function toggleGuest(key){
+  const g=guests[key];if(!g)return;
+  try{
+    await db.ref('guests/'+key).update({active:!g.active});
+    toast(g.active?'⛔ Acceso desactivado — enlace bloqueado':'✅ Invitado activado');
+  }catch(e){toast('❌ Error: '+e.message,'#ef4444');}
+}
+
+// FIX #1: delete removes from DB entirely — link immediately becomes invalid
+async function deleteGuest(key){
+  if(!confirm('¿Eliminar este invitado? Su enlace dejará de funcionar inmediatamente.'))return;
+  try{
+    await db.ref('guests/'+key).remove();
+    toast('🗑️ Invitado eliminado — enlace bloqueado','#ef4444');
+  }catch(e){toast('❌ Error: '+e.message,'#ef4444');}
+}
+
+function renderGuests(){
+  const c=document.getElementById('guestsContainer');if(!c)return;
+  const arr=Object.entries(guests).map(([k,g])=>({...g,_key:k}));
+  if(!arr.length){c.innerHTML='<div class="empty-state"><div class="empty-icon">👥</div><p>No hay invitados. Agregá uno con el botón de arriba.</p></div>';return;}
+  c.innerHTML='<div class="guests-grid">'+arr.map(g=>`
+    <div class="guest-card">
+      <span class="guest-status ${g.active?'status-active':'status-inactive'}">${g.active?'● Activo':'○ Inactivo'}</span>
+      <div class="guest-card-top">
+        <div class="guest-avatar">${initials(g.name)}</div>
+        <div><div class="guest-name">${esc(g.name)}</div><div class="guest-email">${esc(g.email)}</div>${g.nota?`<div class="guest-email" style="font-style:italic">${esc(g.nota)}</div>`:''}</div>
+      </div>
+      <div class="guest-link-box" onclick="showGuestLink('${g.token}')">🔗 Ver enlace de acceso</div>
+      <div style="font-size:.78rem;color:var(--gray-400);margin-bottom:10px">Creado: ${g.created}</div>
+      <div class="guest-actions">
+        <button class="btn btn-sm btn-secondary" onclick="showGuestLink('${g.token}')">🔗 Enlace</button>
+        <button class="btn btn-sm ${g.active?'btn-secondary':'btn-primary'}" onclick="toggleGuest('${g._key}')">${g.active?'⛔ Desactivar':'✅ Activar'}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteGuest('${g._key}')">🗑️</button>
+      </div>
+    </div>`).join('')+'</div>';
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXCEL EXPORT
+// ══════════════════════════════════════════════════════════════
+function getFilteredForExport(){
+  const st=document.getElementById('expStatus')?.value||'';
+  const pr=document.getElementById('expPriority')?.value||'';
+  const fr=document.getElementById('expFrom')?.value;
+  const to=document.getElementById('expTo')?.value;
+  return Object.values(tickets).filter(t=>{
+    if(st&&t.estado!==st)return false;
+    if(pr&&t.prioridad!==pr)return false;
+    if(fr&&new Date(t.fechaRaw)<new Date(fr))return false;
+    if(to&&new Date(t.fechaRaw)>new Date(to+'T23:59:59'))return false;
+    return true;
+  }).sort((a,b)=>new Date(b.fechaRaw)-new Date(a.fechaRaw));
+}
+
+function exportExcel(data){
+  const src=data||Object.values(tickets);
+  if(!src.length){toast('⚠️ No hay tickets para exportar','#f97316');return;}
+  const rows=src.map(t=>({'ID':'#'+sid(t),'Título':t.titulo,'Descripción':t.desc,'Categoría':t.categoria,'Prioridad':t.prioridad,'Estado':t.estado,'Solicitante':t.solicit,'Email':t.email,'Fecha':t.fecha,'Creado por':t.creadoPor||''}));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[8,30,40,18,12,14,20,24,18,12].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Tickets');
+  XLSX.writeFile(wb,'TicketFlow_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  toast('📥 Excel descargado');
+}
+
+function exportExcelFiltered(){exportExcel(getFilteredForExport());}
+
+function previewExport(){
+  const data=getFilteredForExport();
+  document.getElementById('previewSection').style.display='block';
+  const body=document.getElementById('previewBody');
+  if(!data.length){body.innerHTML='<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🔍</div><p>Sin resultados</p></div></td></tr>';return;}
+  body.innerHTML=data.map(t=>`<tr><td><strong>#${sid(t)}</strong></td><td>${esc(t.titulo)}</td><td>${t.categoria}</td><td>${priBadge(t.prioridad)}</td><td>${staBadge(t.estado)}</td><td>${esc(t.solicit)}</td><td style="font-size:.8rem">${esc(t.email)}</td><td style="font-size:.8rem">${t.fecha}</td></tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// EMAIL — FIX #4: credentials stored in localStorage only,
+//         never rendered in guest view
+// ══════════════════════════════════════════════════════════════
+function isEmailConfigured(){return !!(emailCfg.publicKey?.trim()&&emailCfg.serviceId?.trim()&&emailCfg.templateId?.trim());}
+function initEmailJS(){if(!emailCfg.publicKey)return false;try{emailjs.init({publicKey:emailCfg.publicKey});return true;}catch(e){return false;}}
+function saveEmailConfig(){
+  emailCfg.publicKey =document.getElementById('cfgPublicKey').value.trim();
+  emailCfg.serviceId =document.getElementById('cfgServiceId').value.trim();
+  emailCfg.templateId=document.getElementById('cfgTemplateId').value.trim();
+  localStorage.setItem('tf_emailcfg',JSON.stringify(emailCfg));
+  updateCfgStatus();updateCreateHint();
+}
+function updateCfgStatus(){
+  const el=document.getElementById('cfgStatus');if(!el)return;
+  el.className='cfg-status '+(isEmailConfigured()?'cfg-ok':'cfg-warn');
+  el.textContent=isEmailConfigured()?'✅ Configuración completa':'⚠️ Incompleto';
+}
+function updateCreateHint(){
+  const el=document.getElementById('emailStatusHint');if(!el)return;
+  if(isEmailConfigured()){const n=1+emailRecipients.filter(r=>r.email).length;el.innerHTML=`✉️ Se enviarán <strong>${n}</strong> correo${n>1?'s':''} al crear`;el.style.color='var(--teal)';}
+  else{el.innerHTML=`⚠️ Sin email — <a href="#" onclick="showPage('correo');return false" style="color:var(--teal);font-weight:600">Configurar</a>`;el.style.color='var(--text-soft)';}
+}
+async function sendTicketEmails(t){
+  if(!initEmailJS()){addLog('fail','❌ No se pudo inicializar EmailJS');return;}
+  const base={ticket_id:'#'+sid(t),ticket_title:t.titulo,ticket_desc:t.desc,ticket_category:t.categoria,ticket_priority:t.prioridad,ticket_status:t.estado,requester_name:t.solicit,requester_email:t.email,ticket_date:t.fecha};
+  await sendOne({...base,to_email:t.email,to_name:t.solicit,email_type:'confirmation'},t.email);
+  for(const r of emailRecipients){if(!r.email)continue;await sendOne({...base,to_email:r.email,to_name:r.name||r.email,email_type:'notification'},r.email);}
+}
+async function sendOne(params,label){
+  try{await emailjs.send(emailCfg.serviceId,emailCfg.templateId,params);addLog('ok','✅ Enviado → '+label);}
+  catch(e){addLog('fail','❌ Error → '+label+': '+(e?.text||e?.message||JSON.stringify(e)));}
+}
+async function testEmail(){
+  const addr=document.getElementById('testEmailAddr').value.trim();
+  if(!addr){toast('Ingresá un email de prueba','#f97316');return;}
+  if(!isEmailConfigured()){toast('⚠️ Completá la configuración primero','#f97316');return;}
+  if(!initEmailJS()){toast('❌ Error al inicializar EmailJS','#ef4444');return;}
+  const btn=document.getElementById('testBtn');btn.disabled=true;btn.innerHTML='<span class="spinner-w"></span>';
+  try{
+    await emailjs.send(emailCfg.serviceId,emailCfg.templateId,{to_email:addr,to_name:'Test',ticket_id:'#TEST',ticket_title:'Email de Prueba',ticket_desc:'Verificación de EmailJS.',ticket_category:'Test',ticket_priority:'Baja',ticket_status:'Abierto',requester_name:'Sistema',requester_email:addr,ticket_date:new Date().toLocaleString('es-CR',{dateStyle:'short',timeStyle:'short'}),email_type:'test'});
+    addLog('ok','✅ Prueba enviada a '+addr);toast('✅ Email de prueba enviado');
+  }catch(e){const m=e?.text||e?.message||JSON.stringify(e);addLog('fail','❌ Prueba falló: '+m);toast('❌ '+m,'#ef4444');}
+  btn.disabled=false;btn.innerHTML='📧 Prueba';
+}
+function loadEmailConfigFields(){
+  if(currentUser.role==='guest')return; // FIX #4: never populate fields for guest
+  setVal('cfgPublicKey',emailCfg.publicKey);
+  setVal('cfgServiceId',emailCfg.serviceId);
+  setVal('cfgTemplateId',emailCfg.templateId);
+  updateCfgStatus();renderRecipients();renderEmailLog();
+}
+function initEmailPage(){if(currentUser.role==='guest')return;loadEmailConfigFields();}
+function renderRecipients(){
+  const el=document.getElementById('recipientsList');if(!el)return;
+  el.innerHTML=emailRecipients.map((r,i)=>`
+    <div class="recipient-item">
+      <input type="text" value="${esc(r.name||'')}" placeholder="Nombre" onchange="emailRecipients[${i}].name=this.value" style="flex:1">
+      <input type="email" value="${esc(r.email||'')}" placeholder="Email *" onchange="emailRecipients[${i}].email=this.value" style="flex:1.4">
+      <button class="rm-btn" onclick="removeRecipient(${i})">✕</button>
+    </div>`).join('');
+}
+function addRecipient(){emailRecipients.push({name:'',email:''});renderRecipients();}
+function removeRecipient(i){emailRecipients.splice(i,1);renderRecipients();}
+function saveRecipients(){
+  emailRecipients=emailRecipients.filter(r=>r.email.trim());
+  localStorage.setItem('tf_recipients',JSON.stringify(emailRecipients));
+  renderRecipients();updateCreateHint();
+  toast('✅ '+emailRecipients.length+' destinatario'+(emailRecipients.length!==1?'s guardados':' guardado'));
+}
+function addLog(type,msg){
+  const now=new Date().toLocaleTimeString('es-CR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  emailLogArr.unshift({type,msg,time:now});
+  if(emailLogArr.length>100)emailLogArr.pop();
+  localStorage.setItem('tf_emaillog',JSON.stringify(emailLogArr));
+  renderEmailLog();
+}
+function renderEmailLog(){
+  const el=document.getElementById('emailLog');if(!el)return;
+  if(!emailLogArr.length){el.innerHTML='<div class="log-item log-info"><span class="log-time">--:--</span><span>Sin registros</span></div>';return;}
+  el.innerHTML=emailLogArr.slice(0,30).map(l=>`<div class="log-item log-${l.type}"><span class="log-time">${l.time}</span><span>${esc(l.msg)}</span></div>`).join('');
+}
+function clearLog(){emailLogArr=[];localStorage.removeItem('tf_emaillog');renderEmailLog();toast('🗑️ Log limpiado');}
+
+// ══════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════
+function staBadge(s){const m={'Abierto':'badge-open','En Progreso':'badge-progress','Cerrado':'badge-closed'};const i={'Abierto':'📂','En Progreso':'⚙️','Cerrado':'✅'};return`<span class="badge ${m[s]||''}">${i[s]||''} ${s}</span>`;}
+function priBadge(p){const m={'Urgente':'badge-urgent','Alta':'badge-high','Media':'badge-medium','Baja':'badge-low'};return`<span class="badge ${m[p]||''}">${p}</span>`;}
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function initials(n){return n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();}
+function showLoading(t){document.getElementById('loadingText').textContent=t||'Cargando...';document.getElementById('loadingOverlay').style.display='flex';}
+function hideLoading(){document.getElementById('loadingOverlay').style.display='none';}
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',ev=>{if(ev.target===m)m.classList.remove('open');}));
+let toastTimer;
+function toast(msg,color){
+  const el=document.getElementById('toast');
+  document.getElementById('toastMsg').textContent=msg;
+  el.style.background=color||'var(--deep)';
+  el.classList.add('show');clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),3800);
+}
+
+// ══════════════════════════════════════════════════════════════
+// STARTUP
+// ══════════════════════════════════════════════════════════════
+if (!fbCfg) {
+  // First time: show setup screen
+  document.getElementById('setupScreen').style.display = 'flex';
+} else if (ADMIN_TOKEN) {
+  // Has an admin token in URL — validate against Firebase
+  document.getElementById('setupScreen').style.display = 'none';
+  showLoading('Verificando acceso de administrador...');
+  initFirebase(fbCfg, 'adminToken');
+} else if (IS_DIRECT) {
+  // FIX #3: direct URL with no token → show PIN screen
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('noAccessScreen').style.display = 'flex';
+} else {
+  // Has a guest token → validate against Firebase
+  document.getElementById('setupScreen').style.display = 'none';
+  showLoading('Verificando acceso...');
+  initFirebase(fbCfg, 'guest');
+}
+</script>
+</body>
+</html>
